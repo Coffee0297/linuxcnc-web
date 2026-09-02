@@ -53,14 +53,18 @@ const el = {
   toast: $("toast"), lock: $("lockOverlay"),
 };
 
-function post(url, data, keepalive) {
-  // keepalive=true lets the request outlive the page (used for jog stop)
+function post(url, data, keepalive, signal) {
+  // keepalive=true lets the request outlive the page (used for jog stop);
+  // signal lets the caller abort a request that is taking too long
   return fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data || {}),
     keepalive: !!keepalive,
-  }).then((r) => r.json()).catch(() => ({ ok: false, msg: "network error" }));
+    signal,
+  }).then((r) => r.json()).catch((e) => ({
+    ok: false, aborted: !!(e && e.name === "AbortError"), msg: "network error",
+  }));
 }
 
 let toastTimer = null;
@@ -119,6 +123,7 @@ function linkLost() {
   st.link_lost = true;
   el.lock.hidden = false;
   stopJog();
+  discardWheel();
   render();
 }
 connectStream();
@@ -144,6 +149,7 @@ function buildDro() {
       '<span class="dro-val">+0000.000</span>' +
       '<span class="homed-dot"></span>';
     row.addEventListener("pointerdown", () => {
+      if (tracking || jogHeld) return;   // never re-target a gesture in progress
       settings.axis = a;
       saveSettings();
       render();
@@ -192,7 +198,12 @@ function render() {
     : st.estop ? "e-stop active"
     : !st.on ? "machine off"
     : !st.idle ? "program running" : "";
+  if (!jogOk && jogHeld) stopJog();   // release first: a disabled button may swallow pointerup
   el.jogPlus.disabled = el.jogMinus.disabled = !jogOk;
+  const u = st.units || "mm";
+  document.querySelectorAll("[data-unit]").forEach((n) => {
+    n.textContent = n.dataset.unit === "per-min" ? u + "/min" : u;
+  });
 
   const A = settings.axis.toUpperCase();
   el.homeBtn.textContent = "Home " + A;
@@ -242,6 +253,11 @@ let detentQueue = 0;      // not yet flushed to the server
 let tracking = false;
 let lastPointerAngle = 0;
 let activePointer = null;
+let queueAxis = null;     // axis and step the queued detents were made under
+let queueStep = 0;
+let queueSince = 0;       // Date.now() of the first detent in the queue
+const QUEUE_MAX_AGE_MS = 300;      // older queued detents are dropped, never replayed
+const WHEEL_POST_TIMEOUT_MS = 600; // a wheel request slower than this is abandoned
 
 function pointerAngle(ev) {
   const r = el.wheelSvg.getBoundingClientRect();
@@ -278,6 +294,11 @@ el.wheelWrap.addEventListener("pointermove", (ev) => {
   while (pos - emittedDetents >= 1) { emittedDetents++; crossed++; }
   while (emittedDetents - pos >= 1) { emittedDetents--; crossed--; }
   if (crossed !== 0) {
+    if (detentQueue === 0) {
+      queueAxis = settings.axis;
+      queueStep = settings.step;
+      queueSince = Date.now();
+    }
     detentQueue += crossed;
     buzz(Math.abs(crossed));
   }
@@ -291,56 +312,88 @@ function endWheel(ev) {
 }
 el.wheelWrap.addEventListener("pointerup", endWheel);
 el.wheelWrap.addEventListener("pointercancel", endWheel);
+el.wheelWrap.addEventListener("lostpointercapture", endWheel);
 
 let flushing = false;
+function showLeadNote(text) {
+  el.leadNote.textContent = text;
+  clearTimeout(showLeadNote._t);
+  showLeadNote._t = setTimeout(() => { el.leadNote.textContent = ""; }, 1500);
+}
+function discardWheel(why) {
+  if (detentQueue === 0) return;
+  detentQueue = 0;
+  if (why) showLeadNote(why);
+}
 function flushWheel() {
-  if (detentQueue === 0 || flushing) return;
-  const send = detentQueue;
+  if (detentQueue === 0) return;
+  if (Date.now() - queueSince > QUEUE_MAX_AGE_MS) {
+    // clicks that waited behind a stalled link must never become motion later
+    discardWheel("link stalled \u2014 wheel input discarded");
+    return;
+  }
+  if (flushing) return;
+  // send the detents under the axis/step they were made with, not the
+  // current selection (the other thumb may have changed it meanwhile)
+  const send = detentQueue, axis = queueAxis, increment = queueStep;
   detentQueue = 0;
   flushing = true;
-  post("api/wheel", {
-    axis: settings.axis,
-    detents: send,
-    increment: settings.step,
-    velocity: WHEEL_FEED,
-  }).then((r) => {
-    flushing = false;
-    if (!r.ok && r.msg) toast(r.msg);
-    if (r.clamped) {
-      el.leadNote.textContent = "wheel ahead of axis \u2014 extra clicks dropped";
-      clearTimeout(flushWheel._t);
-      flushWheel._t = setTimeout(() => { el.leadNote.textContent = ""; }, 1200);
-    }
-  });
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), WHEEL_POST_TIMEOUT_MS);
+  post("api/wheel", { axis, detents: send, increment, velocity: WHEEL_FEED }, false, ctl.signal)
+    .then((r) => {
+      if (r.aborted) {
+        // the server drops a request that waited too long for its turn
+        // (STALE_WAIT), so nothing stored up can move later
+        discardWheel();
+        showLeadNote("wheel reply late \u2014 input discarded");
+        return;
+      }
+      if (!r.ok && r.msg) toast(r.msg);
+      if (r.clamped) showLeadNote("wheel ahead of axis \u2014 extra clicks dropped");
+    })
+    .finally(() => { clearTimeout(timer); flushing = false; });
 }
 setInterval(flushWheel, WHEEL_FLUSH_MS);
 
 /* -------------------------------------------------------- continuous jog -- */
 let jogHeld = null;      // button element while held
+let jogAxis = null;      // axis of the held jog (sent with its stop)
+let heldSeq = 0;         // sequence number of the held jog
 let keepaliveTimer = null;
-let jogSeq = 0;          // bumped on every start/stop so a late start reply is ignored
+let jogSeq = 0;          // every start gets a new number; the server refuses a
+                         // start whose stop it has already processed ...
+// ... scoped to this page load: the server keeps one high-water mark per
+// client token, so a reload or a second phone starts with a clean slate
+const CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
 function startJog(btn, dir) {
   if (!st.jog_ok || jogHeld) return;
-  jogHeld = btn;
+  const axis = settings.axis;
   const seq = ++jogSeq;
+  jogHeld = btn;
+  jogAxis = axis;
+  heldSeq = seq;
   btn.classList.add("held");
   requestWakeLock();
   post("api/jog", {
-    action: "start", axis: settings.axis, dir, velocity: settings.speed,
+    action: "start", axis, dir, velocity: settings.speed, seq, client: CLIENT,
   }).then((r) => {
-    if (seq !== jogSeq || jogHeld !== btn) {
-      // released before the start round-trip finished: make sure the server
-      // is stopped too, and never start a keepalive that nobody will clear
-      post("api/jog", { action: "stop" }, true);
+    if (heldSeq !== seq || jogHeld !== btn) {
+      // released before the start round-trip finished: if the start went
+      // through, make sure the server is stopped too (a refused start moved
+      // nothing), and never start a keepalive that nobody will clear
+      if (r.ok) post("api/jog", { action: "stop", axis, seq, client: CLIENT }, true);
       return;
     }
     if (!r.ok) { stopJog(); if (r.msg) toast(r.msg); return; }
+    if (r.limited) toast("not homed — jog speed limited");
     clearInterval(keepaliveTimer);
     keepaliveTimer = setInterval(() => {
-      post("api/jog", { action: "keepalive" }).then((k) => {
-        // the server deadman already ended this jog -> release the button
-        if (k.ok && !k.active && jogHeld) stopJog();
+      post("api/jog", { action: "keepalive", seq, client: CLIENT }).then((k) => {
+        // the server deadman already ended THIS jog -> release the button;
+        // a late reply about an older jog must not stop a fresh press
+        if (k.ok && !k.active && heldSeq === seq) stopJog();
       });
     }, KEEPALIVE_MS);
   });
@@ -350,10 +403,13 @@ function stopJog() {
   clearInterval(keepaliveTimer);   // always, even if no button is held
   keepaliveTimer = null;
   if (!jogHeld) return;
-  jogSeq++;
+  const axis = jogAxis, seq = heldSeq;
   jogHeld.classList.remove("held");
   jogHeld = null;
-  post("api/jog", { action: "stop" }, true);
+  jogAxis = null;
+  heldSeq = 0;
+  post("api/jog", { action: "stop", axis, seq, client: CLIENT }, true)
+    .then((r) => { if (!r.ok) toast(r.msg || "jog stop failed"); });
 }
 
 [[el.jogPlus, 1], [el.jogMinus, -1]].forEach(([btn, dir]) => {
@@ -368,15 +424,21 @@ function stopJog() {
 /* if the tab hides or closes mid-jog, stop client-side too
    (the server deadman stops the machine regardless) */
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) { stopJog(); flushWheel(); }
-  else requestWakeLock();
+  if (document.hidden) {
+    stopJog();
+    discardWheel();
+    tracking = false;        // the pointerup may never arrive: end the gesture here
+    activePointer = null;
+  } else {
+    requestWakeLock();
+  }
 });
 window.addEventListener("pagehide", stopJog);
 
 /* -------------------------------------------------------------- controls -- */
 el.modeSeg.addEventListener("click", (ev) => {
   const b = ev.target.closest("button");
-  if (!b) return;
+  if (!b || tracking) return;
   stopJog();
   settings.mode = b.dataset.mode;
   saveSettings();
@@ -384,7 +446,7 @@ el.modeSeg.addEventListener("click", (ev) => {
 });
 el.stepSeg.addEventListener("click", (ev) => {
   const b = ev.target.closest("button");
-  if (!b) return;
+  if (!b || tracking) return;   // no step change under a finger on the wheel
   settings.step = parseFloat(b.dataset.step);
   saveSettings();
   render();
@@ -407,21 +469,52 @@ el.vibeBtn.addEventListener("click", () => {
   if (settings.vibrate) buzz(1);
   render();
 });
-el.abortBtn.addEventListener("click", () => {
-  detentQueue = 0;
+function sendAbort(retry) {
+  discardWheel();
   stopJog();
-  post("api/machine", { action: "abort" })
-    .then((r) => { if (!r.ok) toast(r.msg || "abort not delivered"); });
-});
-el.powerBtn.addEventListener("click", () => {
-  post("api/machine", { action: st.on ? "off" : "on" })
+  post("api/machine", { action: "abort" }).then((r) => {
+    if (r.ok) return;
+    if (retry) setTimeout(() => sendAbort(false), 300);
+    else toast(r.msg || "abort not delivered");
+  });
+}
+// pointerdown, not click: a panicked press must not wait for the finger to lift
+el.abortBtn.addEventListener("pointerdown", () => sendAbort(true));
+
+/* Energising the drives and homing every joint start power or motion from a
+   phone that may be in a pocket: require a deliberate hold, not a tap. */
+const HOLD_MS = 600;
+function holdToConfirm(btn, needsHold, action) {
+  let timer = null, pid = null;
+  const cancel = (ev) => {
+    if (pid === null || (ev && ev.pointerId !== pid)) return;
+    pid = null;
+    if (timer) { clearTimeout(timer); timer = null; toast("hold to confirm"); }
+    btn.classList.remove("arming");
+  };
+  btn.addEventListener("pointerdown", (ev) => {
+    if (pid !== null) return;   // a second finger can neither extend nor re-arm a hold
+    if (!needsHold()) { action(false); return; }
+    pid = ev.pointerId;
+    btn.setPointerCapture(pid);
+    btn.classList.add("arming");
+    timer = setTimeout(() => { timer = null; btn.classList.remove("arming"); action(true); }, HOLD_MS);
+  });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => btn.addEventListener(t, cancel));
+  // a hold must never complete on a page that went to the background
+  document.addEventListener("visibilitychange", () => { if (document.hidden) cancel(); });
+}
+holdToConfirm(el.powerBtn, () => !st.on, (held) => {
+  // decided when the finger went down: a completed hold is always "on",
+  // an immediate press (button read "Machine off") is always "off"
+  post("api/machine", { action: held ? "on" : "off" })
     .then((r) => { if (!r.ok && r.msg) toast(r.msg); });
 });
-el.homeBtn.addEventListener("click", () => {
+holdToConfirm(el.homeBtn, () => true, () => {   // homing is motion too
   post("api/machine", { action: "home", axis: settings.axis })
     .then((r) => { if (!r.ok && r.msg) toast(r.msg); });
 });
-el.homeAllBtn.addEventListener("click", () => {
+holdToConfirm(el.homeAllBtn, () => true, () => {
   post("api/machine", { action: "home" })
     .then((r) => { if (!r.ok && r.msg) toast(r.msg); });
 });
@@ -441,7 +534,7 @@ function openHalfDlg() {
   const hasTool = t.id > 0 && t.dia > 0;
   el.halfUseTool.hidden = !hasTool;
   el.halfTool.textContent = hasTool
-    ? "Tool " + t.id + " loaded \u00b7 \u00d8 " + t.dia.toFixed(3) + " mm"
+    ? "Tool " + t.id + " loaded \u00b7 \u00d8 " + t.dia.toFixed(3) + " " + (st.units || "mm")
     : (t.id > 0 ? "Tool " + t.id + " loaded, no diameter in tool table"
                 : "No tool loaded \u2014 enter the diameter");
   el.halfDia.value = hasTool ? t.dia : settings.toolDia;

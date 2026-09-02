@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run only the MPG pendant, without the rest of linuxcnc-web.
 
-Useful for testing on any PC (runs the built-in simulator when the
-`linuxcnc` module is not available):
+Useful for testing on any PC: the built-in simulator starts automatically on
+Windows/macOS; on Linux run it with MPG_SIM=1 (see README):
 
     python standalone_mpg.py
 

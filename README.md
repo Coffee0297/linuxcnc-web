@@ -75,7 +75,9 @@ All speeds and step sizes are machine units — the pendant assumes a metric (mm
 config; on an inch machine the same numbers are inches.
 
 The pendant maps axis letters to joint numbers 1:1 (X→0, Y→1, Z→2), i.e. it is
-written for trivkins XYZ machines with one motor per axis.
+written for trivkins XYZ machines with one motor per axis. On other kinematics
+(gantry, lathe) it detects the mismatch and refuses joint-mode jogs and per-axis
+homing — see the Safety model.
 
 To start the server at boot, a minimal systemd unit (it simply retries every 5 s
 until LinuxCNC is up)
@@ -135,6 +137,25 @@ to what you expect, you picked the wrong side button.
   stop.
 - The page treats 1.5 s of silence on the status stream as a lost link: it releases
   a held jog client-side and greys out. The server-side 0.4 s deadman is unchanged.
+- The stop of every held jog is checked. If LinuxCNC does not acknowledge it within
+  0.5 s the server also sends a task abort and the phone shows *jog stop failed -
+  abort sent*.
+- Start and stop requests carry a sequence number, so a stop that overtakes its own
+  start on the network can never leave a jog running unwatched.
+- Until every joint is homed, continuous jog speed is capped at 600 mm/min
+  (`UNHOMED_MAX_MM_MIN`) — unhomed joints have no soft limits.
+- **Machine on**, **Home X** and **Home all** need a 0.6 s hold, not a tap; a short
+  tap says *hold to confirm*. Wheel and jog requests that waited more than 0.5 s
+  for their turn on the server are dropped rather than applied late.
+- Zero refuses while an axis is still moving. Wheel clicks that waited more than
+  0.3 s behind a stalled link are discarded, never replayed, and the axis or step
+  cannot be changed while a finger is on the wheel.
+- Joint-mode jogging (before homing) and per-axis homing are refused on machines
+  whose axis letters do not map 1:1 to joints (gantry XYYZ, lathe XZ): use
+  **Home all**, then jog in world mode.
+- The pendant does not read the LinuxCNC error channel by default: it is a queue, so
+  a message shown on the phone would be taken away from AXIS or gmoccapy at the
+  machine. Set `MPG_ERRORS=1` to get error toasts when the phone is the only GUI.
 - Keep the server on the shop LAN only. It has **no authentication** and it moves a
   machine — never port-forward or expose it to the internet.
 
@@ -142,12 +163,16 @@ to what you expect, you picked the wrong side button.
 
 | Where | What |
 |---|---|
-| `mpg/mpg.py` (top) | `AXES` (add `"a"` for a 4th axis — the UI follows), `CONT_TIMEOUT` deadman timeout, `MAX_LEAD_FACTOR` / `MAX_LEAD_MM` wheel lead cap, poll/SSE rates |
+| `mpg/mpg.py` (top) | `AXES` (add `"a"` for a 4th axis — the UI follows), `CONT_TIMEOUT` deadman timeout, `MAX_LEAD_FACTOR` / `MAX_LEAD_MM` wheel lead cap, `UNHOMED_MAX_MM_MIN` speed cap before homing, poll/SSE rates. Environment: `MPG_SIM=1` simulator, `MPG_ERRORS=1` error toasts |
 | `mpg/static/mpg.js` (top) | `DETENT_DEG` detents per revolution (also drives the tick marks on the wheel), `WHEEL_FEED` wheel feed rate, `KEEPALIVE_MS` keepalive interval — keep it well under `CONT_TIMEOUT` |
 | `mpg/templates/mpg.html` | the step-size and jog-speed button values |
 
 ## Troubleshooting
 
+- *No error toasts on the phone* — by design (see Safety model); start with
+  `MPG_ERRORS=1` if the phone is the only GUI in use.
+- *"joint jog refused"* — this machine's joints are not a plain XYZ mapping; press
+  **Home all**, then jog in world mode.
 - *waiting for LinuxCNC* — LinuxCNC isn't running on this PC, or the app was started
   by a different user than LinuxCNC (NML needs the same environment).
 - *Phone can't connect* — Flask started without `--host=0.0.0.0`, or a firewall on
@@ -186,6 +211,13 @@ The original page at `/` is mostly as upstream left it, with these fixes:
   the last programmed S, else at 1 rpm like AXIS.
 - The MDI history keeps the 10 most recent commands; MDI text is URL-encoded and
   refusals are shown next to the Go button.
+- A red banner appears when the page loses the server, instead of the DRO silently
+  freezing on old values.
+- Still as upstream: the jog buttons on this page have no server-side dead-man and
+  always request joint-jog mode. Use the pendant for jogging.
+- Still as upstream: while this page is open it reads the LinuxCNC error channel for
+  its error list, which takes those messages away from AXIS or gmoccapy. Close it
+  when AXIS is the operator GUI.
 - Jog buttons stop when the pointer leaves them.
 
 These upstream-side changes could not be run against a real machine — try them once

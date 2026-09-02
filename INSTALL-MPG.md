@@ -75,6 +75,16 @@ and this page moves a machine. Do not port-forward it.
   second.
 - The page itself treats 1.5 s of silence on the status stream as a lost
   link: it releases a held jog client-side and greys out.
+- The stop of every held jog is checked; if LinuxCNC does not acknowledge it
+  within 0.5 s the server also sends a task abort and the phone says so.
+  Speed is capped at 600 mm/min until every joint is homed. Machine on,
+  Home X and Home all need a 0.6 s hold. Zero refuses while an axis is
+  still moving.
+- The original page at / still reads the error channel while it is open and
+  takes those messages away from AXIS; close it when AXIS is the operator GUI.
+- Error toasts are off by default (the LinuxCNC error channel is a queue and
+  the phone would steal messages from AXIS); start with `MPG_ERRORS=1` if the
+  phone is your only GUI.
 - The wheel sends bounded incremental jogs and is never allowed to run more
   than a few increments (max 2 mm) ahead of the axis. If you spin faster
   than the axis can follow, extra clicks are dropped and the page says so —
@@ -86,7 +96,9 @@ and this page moves a machine. Do not port-forward it.
 ## 6. Tuning
 
 Top of `mpg/mpg.py`: `AXES` (add `"a"` for a 4th axis — the UI follows
-automatically), deadman timeout, wheel lead cap, poll rates.
+automatically), deadman timeout, wheel lead cap, `UNHOMED_MAX_MM_MIN` speed cap
+before homing, poll rates. Environment: `MPG_SIM=1` simulator, `MPG_ERRORS=1`
+error toasts.
 Top of `mpg/static/mpg.js`: detent angle, wheel feed rate.
 Speed/step button values: `mpg/templates/mpg.html`.
 

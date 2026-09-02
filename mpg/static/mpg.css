@@ -248,6 +248,8 @@ body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
 }
 .act:active { border-color: var(--amber); color: var(--amber); }
 .act.off { color: var(--dim); }
+.act.arming { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); } /* hold-to-confirm in progress */
+.act { touch-action: none; } /* a drifting finger during a hold must not become a pan + pointercancel */
 
 /* ---- half-diameter dialog ------------------------------------------------ */
 .overlay {

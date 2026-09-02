@@ -236,6 +236,7 @@ html,body,h1,h2,h3,h4,h5 {
 <body class="w3-light-grey">
     
 <div id="vm">
+<div id="conn_warn" v-if="stale" style="background:#EF9999;padding:6px 10px;font-weight:bold;margin-bottom:8px">No connection to the server &mdash; the values on this page are stale</div>
 
 
 <table>

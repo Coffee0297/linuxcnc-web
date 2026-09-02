@@ -29,6 +29,8 @@ const vm = new Vue({
         errors: {},
         mdi_commands: [],
         mdi_status: '',
+        stale: false,
+        lastOk: 0,
 
         din: [],
         dout: [],
@@ -92,6 +94,8 @@ const vm = new Vue({
             try {
                 const gResponse = await fetch(apiEndpoint + 'update');
                 const gObject = await gResponse.json();
+                this.lastOk = Date.now();
+                this.stale = false;
 
                 this.estop = gObject.estop;
                 this.enabled = gObject.enabled;
@@ -152,13 +156,16 @@ const vm = new Vue({
                     element.setAttribute("cy", height - (parseFloat(this.position.Y.pos) - miny) - border);
                 }
             } catch (err) {
+                this.stale = true;   // server or LinuxCNC gone: say so instead of showing old values
                 console.error(err);
             }
 
         }
     },
     mounted: function () {
+      this.lastOk = Date.now();   // so a server that never answers the first poll still shows the banner
       window.setInterval(() => {
+        if (Date.now() - this.lastOk > 1500) this.stale = true;
         this.fetch()
       }, 500)
     }

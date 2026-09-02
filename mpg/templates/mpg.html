@@ -75,7 +75,7 @@
       <button data-speed="100" type="button">100</button>
       <button data-speed="600" class="on" type="button">600</button>
       <button data-speed="3000" type="button">3000</button>
-      <span class="seg-unit">mm/min</span>
+      <span class="seg-unit" data-unit="per-min">mm/min</span>
     </div>
     <div class="jog-buttons">
       <button id="jogMinus" class="jog-btn" type="button">&minus;</button>
@@ -98,7 +98,7 @@
       <h2 id="halfTitle" class="dlg-title">Zero X at edge (&half; tool &Oslash;)</h2>
       <p id="halfTool" class="dlg-tool"></p>
       <button id="halfUseTool" class="chip dlg-usetool" type="button">Use tool table &Oslash;</button>
-      <label class="dlg-label" for="halfDia">Tool diameter (mm)</label>
+      <label class="dlg-label" for="halfDia">Tool diameter (<span data-unit>mm</span>)</label>
       <input id="halfDia" class="dlg-input" type="number" inputmode="decimal"
              min="0" step="0.001" placeholder="6.000">
       <p id="halfErr" class="dlg-err" hidden>Enter a diameter above 0</p>
