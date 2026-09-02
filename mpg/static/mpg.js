@@ -45,7 +45,7 @@ const el = {
   wheelWrap: $("wheelWrap"), wheelSvg: $("wheelSvg"), rotor: $("wheelRotor"),
   ticks: $("ticks"), wheelHint: $("wheelHint"),
   jogBtns: Array.from(document.querySelectorAll("#jogPane .jog-btn")),   // six arrows
-  homeBtn: $("homeBtn"), homeAllBtn: $("homeAllBtn"),
+  jogNote: $("jogNote"), homeBtn: $("homeBtn"), homeAllBtn: $("homeAllBtn"),
   zeroBtn: $("zeroBtn"), powerBtn: $("powerBtn"), vibeBtn: $("vibeBtn"),
   zeroHalfBtn: $("zeroHalfBtn"), halfDlg: $("halfDlg"), halfTitle: $("halfTitle"),
   halfTool: $("halfTool"), halfUseTool: $("halfUseTool"), halfDia: $("halfDia"),
@@ -160,8 +160,9 @@ function buildDro() {
 }
 
 function fmt(v) {
-  const sign = v < 0 ? "\u2212" : "\u00a0";
-  return sign + Math.abs(v).toFixed(3).padStart(8, "\u00a0");
+  // sign next to the digits, fixed 9-character field so decimals stay aligned
+  const s = (v < 0 ? "\u2212" : "") + Math.abs(v).toFixed(3);
+  return s.padStart(9, "\u00a0");
 }
 
 /* -------------------------------------------------------------- render -- */
@@ -194,11 +195,16 @@ function render() {
   el.coordBtn.textContent = settings.coord;
 
   const jogOk = c && st.jog_ok;
-  el.wheelWrap.classList.toggle("disabled", !jogOk);
-  el.wheelHint.textContent = !c ? "no connection"
+  const hint = !c ? "no connection"
     : st.estop ? "e-stop active"
     : !st.on ? "machine off"
     : !st.idle ? "program running" : "";
+  el.wheelWrap.classList.toggle("disabled", !jogOk);
+  el.wheelHint.textContent = hint;
+  el.jogNote.textContent = jogOk
+    ? "Hold an arrow to move that axis. Release stops."
+    : hint + " — jogging disabled";
+  el.jogNote.classList.toggle("warn", !jogOk);
   if (!jogOk && jogHeld) stopJog();   // release first: a disabled button may swallow pointerup
   el.jogBtns.forEach((b) => {
     b.disabled = !jogOk;
@@ -379,6 +385,9 @@ function startJog(btn, axis, dir) {
   jogAxis = axis;
   heldSeq = seq;
   btn.classList.add("held");
+  // light up the DRO row of the axis that is moving (it may not be the selected one)
+  const row = el.dro.querySelector('.dro-row[data-axis="' + axis + '"]');
+  if (row) row.classList.add("jogging");
   requestWakeLock();
   post("api/jog", {
     action: "start", axis, dir, velocity: settings.speed, seq, client: CLIENT,
@@ -409,6 +418,7 @@ function stopJog() {
   if (!jogHeld) return;
   const axis = jogAxis, seq = heldSeq;
   jogHeld.classList.remove("held");
+  el.dro.querySelectorAll(".dro-row.jogging").forEach((r) => r.classList.remove("jogging"));
   jogHeld = null;
   jogAxis = null;
   heldSeq = 0;

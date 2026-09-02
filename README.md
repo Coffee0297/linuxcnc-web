@@ -12,9 +12,6 @@ over shop Wi-Fi. The original web frontend still lives at `/` (with a few fixes,
   <img src="images/03-zero-half-dialog.png" width="230" alt="Half-diameter edge zero">
 </p>
 
-*The jog-mode screenshot shows the earlier two-button layout; jog mode now has six
-arrows (X/Y cross, Z pair).*
-
 ## Features
 
 - **MPG wheel** — 24 detents per revolution, one vibration tick per detent
@@ -198,8 +195,8 @@ NML at 20 Hz and streams it to the page over Server-Sent Events at 10 Hz; comman
 go back as small JSON POSTs. Wheel detents become bounded incremental jogs, held
 buttons become continuous jogs guarded by a watchdog thread, and touch-off runs
 `G10 L20` through a brief MDI round-trip. No websockets, no build step, no
-dependencies beyond Flask. The screenshots in `images/` are design renders generated
-from the stylesheet.
+dependencies beyond Flask. The screenshots in `images/` are taken from the pendant
+running in simulator mode.
 
 ## Changes to the upstream UI
 

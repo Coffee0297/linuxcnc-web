@@ -119,6 +119,7 @@ body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
   white-space: pre;
 }
 .dro-row.sel .dro-val { color: var(--amber); font-size: 3.8rem; }
+.dro-row.jogging .dro-axis, .dro-row.jogging .dro-val { color: var(--amber); } /* axis being jogged */
 .homed-dot {
   width: 0.9rem; height: 0.9rem; border-radius: 50%;
   background: var(--line);
@@ -247,6 +248,7 @@ body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
 .jog-btn:active .lbl, .jog-btn.held .lbl { color: #000; }
 .jog-btn:disabled { opacity: 0.35; }
 .jog-note { font-size: 1.2rem; color: var(--dim); text-align: center; margin: 0 0 0.8rem; }
+.jog-note.warn { color: var(--amber); }
 
 /* ---- action row --------------------------------------------------------- */
 .actions {
@@ -380,7 +382,7 @@ body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
   .mode-seg { grid-area: mode; }
   .actions  { grid-area: acts; align-self: start; }
   .pane     { grid-area: pane; }
-  #wheelSvg { width: min(26rem, 40vw); width: min(26rem, 44dvh, 40vw); }
+  #wheelSvg { width: min(28rem, 40vw); width: min(28rem, 56dvh, 40vw); }
   .jog-buttons { min-height: 20rem; }
 }
 
