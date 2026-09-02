@@ -1,16 +1,17 @@
 import math
 import re
 import os
-import glob
-import time
+import html
+import subprocess
 import datetime
 import linuxcnc
 
 from flask import Blueprint, render_template, request, redirect
+from werkzeug.utils import secure_filename
 
 
-COMMAND = re.compile("(?P<line>\d+) N\.* (?P<type>[A-Z_]+)\((?P<coords>.*)\)")
-ALLOWED_EXTENSIONS = {'ngc', 'ng'}
+COMMAND = re.compile(r"(?P<line>\d+) N[\d.]*\s*(?P<type>[A-Z_]+)\((?P<coords>.*)\)")
+ALLOWED_EXTENSIONS = {'ngc', 'nc'}
 UPLOAD_FOLDER = f"{os.path.expanduser('~')}/nc_files/"
 
 # http://linuxcnc.org/docs/master/html/de/config/python-interface.html
@@ -27,27 +28,51 @@ client_bp = Blueprint(
 )
 
 
+def allowed_file(name):
+    return '.' in name and name.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
 @client_bp.route("/files")
 def files():
     files = {}
-    for filename in glob.glob(f"{UPLOAD_FOLDER}/*.ngc"):
-        file_stats = os.stat(filename)
-        
-        mtime = datetime.datetime.fromtimestamp(file_stats.st_mtime).strftime('%Y-%m-%d %H:%M')
-        
-        files[filename] = {"name": os.path.basename(filename), "size": file_stats.st_size, "mtime": mtime}
+    if os.path.isdir(UPLOAD_FOLDER):
+        for name in sorted(os.listdir(UPLOAD_FOLDER)):
+            if not allowed_file(name):
+                continue
+            filename = os.path.join(UPLOAD_FOLDER, name)
+            if not os.path.isfile(filename):
+                continue
+            file_stats = os.stat(filename)
+
+            mtime = datetime.datetime.fromtimestamp(file_stats.st_mtime).strftime('%Y-%m-%d %H:%M')
+
+            files[filename] = {"name": name, "size": file_stats.st_size, "mtime": mtime}
     return render_template("files.html", files=files)
 
 
 @client_bp.route('/upload', methods=['GET', 'POST'])
 def upload():
     if request.method == 'POST':
-        filefd = request.files['file']
-        if filefd:
-            target = f"{UPLOAD_FOLDER}/{filefd.filename}"
-            print(target)
-            open(target, "wb").write(filefd.read());
-            return redirect("/files")
+        filefd = request.files.get('file')
+        if not filefd or not filefd.filename:
+            return 'No file uploaded', 400
+        name = secure_filename(filefd.filename)
+        if not allowed_file(name):
+            return 'Only .ngc/.nc files are accepted', 400
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        target = os.path.join(UPLOAD_FOLDER, name)
+        # write to a temp file first: a program may be running from the old file
+        tmp = target + '.part'
+        try:
+            filefd.save(tmp)
+            os.replace(tmp, target)
+        except BaseException:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
+        return redirect("/files")
     return 'No file uploaded'
 
 
@@ -56,32 +81,42 @@ def upload():
 def index():
     filename = request.args.get("filename")
     if filename:
-        print(f"loading file: {filename}")
+        real = os.path.realpath(filename)
+        base = os.path.realpath(UPLOAD_FOLDER)
+        if not (real == base or real.startswith(base + os.sep)) or not os.path.isfile(real):
+            return 'file must be an existing file inside the upload folder', 400
 
         s.poll()
         if s.task_mode != linuxcnc.MODE_AUTO:
             c.mode(linuxcnc.MODE_AUTO)
-        c.program_open(filename)
+        c.program_open(real)
 
         return redirect("/")
 
 
     s.poll()
     filename = s.file
-    if filename:
-        content = open(filename, "r").read()
+    if filename and os.path.isfile(filename):
+        with open(filename, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
     else:
         content = ""
 
     svg_out = []
-    p = os.popen(f"rs274 -g '{filename}'")
-    output = p.readlines()
-    r = p.close()
+    output = []
+    if filename and os.path.isfile(filename):
+        try:
+            # rs274 echoes COMMENT() with the raw source bytes: never let a cp1252 "°" 500 the page
+            result = subprocess.run(["rs274", "-g", filename], capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace", timeout=30)
+            output = result.stdout.splitlines()
+        except (OSError, subprocess.TimeoutExpired):
+            output = []
     last_pos = ()
-    pos_min_x = 9999999999
-    pos_min_y = 9999999999
-    pos_max_x = 0
-    pos_max_y = 0
+    pos_min_x = float('inf')
+    pos_min_y = float('inf')
+    pos_max_x = float('-inf')
+    pos_max_y = float('-inf')
     for line in output:
         result = COMMAND.match(line.strip())
         if result:
@@ -89,13 +124,14 @@ def index():
                 coords = result["coords"].split(",")
                 new_x = float(coords[0].strip())
                 new_y = float(coords[1].strip())
-                new_z = float(coords[2].strip())
                 pos_min_x = min(new_x, pos_min_x)
                 pos_min_y = min(new_y, pos_min_y)
                 pos_max_x = max(new_x, pos_max_x)
                 pos_max_y = max(new_y, pos_max_y)
 
-    print(pos_min_x, pos_min_y, pos_max_x, pos_max_y)
+    if pos_min_x > pos_max_x:
+        # no motion in the program
+        pos_min_x = pos_min_y = pos_max_x = pos_max_y = 0.0
 
     width = pos_max_x - pos_min_x
     height = pos_max_y - pos_min_y
@@ -106,6 +142,7 @@ def index():
     height += (border * 2)
 
 
+    color = "white"
     for line in output:
         result = COMMAND.match(line.strip())
         if result:
@@ -113,7 +150,8 @@ def index():
                 coords = result["coords"].split(",")
                 new_x = float(coords[0].strip()) - pos_min_x + border
                 new_y = height - (float(coords[1].strip()) - pos_min_y) - border
-                new_z = float(coords[2].strip())
+                new_z = float(coords[5].strip())
+                color = "white"
                 if coords[4].strip()[0] == "-":
                     direction = "cw"
                 else:
@@ -140,11 +178,11 @@ def index():
                 last_pos = (new_x, new_y, new_z)
 
     lines = "".join(svg_out)
-    svg_str = f'<svg height="100%" width="100%" viewBox="0 0 {width} {height}" style="background-color:black" xmlns="http://www.w3.org/2000/svg">{lines}<circle id="position" cx="0" cy="0" r="1" _border="{border}" _height="{height}" style="fill:red;stroke:red;stroke-width:0"/></svg>'
+    svg_str = f'<svg height="100%" width="100%" viewBox="0 0 {width} {height}" style="background-color:black" xmlns="http://www.w3.org/2000/svg">{lines}<circle id="position" cx="0" cy="0" r="1" _border="{border}" _height="{height}" _minx="{pos_min_x}" _miny="{pos_min_y}" style="fill:red;stroke:red;stroke-width:0"/></svg>'
 
     content_ln = []
     for ln, line in enumerate(content.split("\n"), 1):
-        content_ln.append(f"<div id='ln{ln}'>{ln:05}: {line}</div>")
+        content_ln.append(f"<div id='ln{ln}'>{ln:05}: {html.escape(line)}</div>")
 
 
     return render_template("index.html", gcode="".join(content_ln), svg_str=svg_str)
@@ -154,73 +192,8 @@ def index():
 def get_file():
     s.poll()
     filename = s.file
-    print("## filename ", filename)
-    content = open(filename, "r").read()
-    print("## ", content)
+    if not filename or not os.path.isfile(filename):
+        return 'no file loaded', 404
+    with open(filename, "r", encoding="utf-8", errors="replace") as f:
+        content = f.read()
     return content.replace("\n", "<br/>")
-
-
-@client_bp.route("/view")
-def view():
-    return render_template("view.html")
-
-@client_bp.route("/mdi")
-def do_mdi():
-
-    s = linuxcnc.stat()
-    c = linuxcnc.command()
-
-    c.mode(linuxcnc.MODE_MDI)
-    c.wait_complete() # warte bis mode Wechsel ausgeführt
-    c.mdi("G0 X10 Y20 Z30")
-
-    return "OK"
-
-
-@client_bp.route("/start")
-def do_start():
-
-    s = linuxcnc.stat()
-    c = linuxcnc.command()
-
-    c.mode(linuxcnc.MODE_AUTO)
-
-    c.auto(linuxcnc.AUTO_RUN, 0)
-    #c.auto(linuxcnc.AUTO_STEP)
-    #c.auto(linuxcnc.AUTO_PAUSE)
-    #c.auto(linuxcnc.AUTO_RESUME)
-
-    return "OK"
-
-
-@client_bp.route("/spindle")
-def do_spindle():
-
-    s = linuxcnc.stat()
-    c = linuxcnc.command()
-
-    c.mode(linuxcnc.MODE_MANUAL)
-    c.spindle(linuxcnc.SPINDLE_FORWARD, 1024)
-    #c.spindle(linuxcnc.SPINDLE_OFF)
-
-    return "OK"
-
-
-@client_bp.route("/homeing")
-def do_homeing():
-
-    s = linuxcnc.stat()
-    c = linuxcnc.command()
-
-    print(dir(s))
-    print(dir(c))
-
-    c.mode(linuxcnc.MODE_MANUAL)
-
-    c.spindle(linuxcnc.SPINDLE_FORWARD, 1024)
-    #c.spindle(linuxcnc.SPINDLE_OFF)
-
-
-    return "OK"
-
-

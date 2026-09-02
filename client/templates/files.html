@@ -39,8 +39,8 @@
     </tr>
     {% for file in files %}
     <tr>
-        <td><a href="/?filename={{ file }}">{{ files[file].name }}</td>
-        <td>{{ files[file].size }} kByte</td>
+        <td><a href="/?filename={{ file|urlencode }}">{{ files[file].name }}</a></td>
+        <td>{{ (files[file].size / 1024) | round(1) }} kB</td>
         <td>{{ files[file].mtime }}</td>
     </tr>
     {% endfor %}
@@ -49,7 +49,7 @@
 <br />&nbsp;
 <form action="/upload" method="post" enctype="multipart/form-data">
   <label>Upload: 
-    <input name="file" type="file" size="50" accept="*"> 
+    <input name="file" type="file" size="50" accept=".ngc,.nc"> 
   </label>  
   <button>send</button>
 </form>

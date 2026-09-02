@@ -240,15 +240,15 @@ html,body,h1,h2,h3,h4,h5 {
 
 <table>
     <tr>
-        <td><div href="#" v-if="!estop" v-on:mousedown="setState(1)" class="oo_button estop"></div><div href="#" v-if="estop" v-on:mousedown="setState(2)" class="oo_button estop_active estop"></div></td>
-        <td><div href="#" v-if="enabled" v-on:mousedown="setState(3)" class="oo_button power_active power"></div><div href="#" v-if="!enabled" v-on:mousedown="setState(4)" class="oo_button power"></div></td>
+        <td><div v-if="!estop" v-on:mousedown="setState(1)" class="oo_button estop"></div><div v-if="estop" v-on:mousedown="setState(2)" class="oo_button estop_active estop"></div></td>
+        <td><div v-if="enabled" v-on:mousedown="setState(3)" class="oo_button power_active power"></div><div v-if="!enabled" v-on:mousedown="setState(4)" class="oo_button power"></div></td>
         <td>&nbsp;&nbsp;&nbsp;</td>
-        <td><div href="#" v-on:mousedown="doApiCall('auto/RUN')" class="oo_button programm_active programm"></div></td>
-        <td><div href="#" v-on:mousedown="doApiCall('auto/STEP')" class="oo_button step_active step"></div></td>
-        <td><div href="#" v-if="!paused" v-on:mousedown="doApiCall('auto/PAUSE')" class="oo_button pause_active pause"></div><div href="#" v-if="paused" v-on:mousedown="doApiCall('auto/RESUME')" class="oo_button pause"></div></td>
-        <td><div href="#" v-on:mousedown="doApiCall('auto/STOP')" class="oo_button stop_active stop"></div></td>
+        <td><div v-on:mousedown="doApiCall('auto/RUN')" class="oo_button programm_active programm"></div></td>
+        <td><div v-on:mousedown="doApiCall('auto/STEP')" class="oo_button step_active step"></div></td>
+        <td><div v-if="!paused" v-on:mousedown="doApiCall('auto/PAUSE')" class="oo_button pause_active pause"></div><div v-if="paused" v-on:mousedown="doApiCall('auto/RESUME')" class="oo_button pause"></div></td>
+        <td><div v-on:mousedown="doApiCall('auto/STOP')" class="oo_button stop_active stop"></div></td>
         <td>&nbsp;&nbsp;&nbsp;</td>
-        <td><a href="/files" class="oo_button open"></></td>
+        <td><a href="/files" class="oo_button open"></a></td>
 
     </tr>
 </table>
@@ -265,17 +265,17 @@ html,body,h1,h2,h3,h4,h5 {
             <div id="ManualControl" class="tabcontent ltabcontent ldefaultOpen">
                 <div v-for="(value, axis) in position">
                     [[axis]] :
-                    <button v-on:mouseup="JogStop([[axis]])" v-on:mousedown="JogStart([[axis]], -100)">-</button>
-                    <button v-on:mouseup="JogStop([[axis]])" v-on:mousedown="JogStart([[axis]], 100)">+</button>
+                    <button v-on:pointerdown="JogStart([[axis]], -100)" v-on:pointerup="JogStop([[axis]])" v-on:pointerleave="JogStop([[axis]])" v-on:pointercancel="JogStop([[axis]])">-</button>
+                    <button v-on:pointerdown="JogStart([[axis]], 100)" v-on:pointerup="JogStop([[axis]])" v-on:pointerleave="JogStop([[axis]])" v-on:pointercancel="JogStop([[axis]])">+</button>
                 </div>
 
                 <button v-on:mousedown="doApiCall('homing/-1')">HOME ALL</button><br/>
 
                 <div v-for="(value, num) in spindle">
                     Spindle[[ num ]] : 
-                    <button v-on:mousedown="SpindleRev([[num]])">↶</button>
-                    <button v-on:mousedown="SpindleStart([[num]])">STOP</button>
-                    <button v-on:mousedown="SpindleFfw([[num]])">↷</button>
+                    <button v-on:pointerdown="spindleCmd(num, 'REVERSE')">↶</button>
+                    <button v-on:pointerdown="spindleCmd(num, 'OFF')">STOP</button>
+                    <button v-on:pointerdown="spindleCmd(num, 'FORWARD')">↷</button>
                 </div>
             </div>
 
@@ -287,27 +287,27 @@ html,body,h1,h2,h3,h4,h5 {
                 <br/>
                 <b>MDI-Command:</b>
                 <input @keyup.enter="mdiCommand" type="text" id="mdi_command" name="fname">
-                <button v-on:mousedown="mdiCommand()">Go</button>
+                <button v-on:mousedown="mdiCommand()">Go</button> <span id="mdi_status">[[ mdi_status ]]</span>
             </div>
 
             <table>
-                <body>
+                <tbody>
                     <tr>
                         <td><B>Feed-Override</B></td>
                         <td valign="right"><B>[[ feedrate ]] %</B></td>
-                        <td><input type="range" min="0.0" max="100.0" value="[[ feedrate ]]" v-model="feedrate" step="1.0" class="slider" v-model="sliderVal" @change="feedrateChange"></td>
+                        <td><input type="range" min="0.0" max="100.0" v-model="feedrate" step="1.0" class="slider" @change="feedrateChange"></td>
                     </tr>
                     <tr>
                         <td><B>Rapid-Override</B></td>
                         <td valign="right"><B>[[ rapidrate ]] %</B></td>
-                        <td><input type="range" min="0.0" max="100.0" value="[[ rapidrate ]]" v-model="rapidrate" step="1.0" class="slider" v-model="sliderVal" @change="rapidrateChange"></td>
+                        <td><input type="range" min="0.0" max="100.0" v-model="rapidrate" step="1.0" class="slider" @change="rapidrateChange"></td>
                     </tr>
                     <tr v-for="(value, num) in spindle">
                         <td><B>Spindle[[ num ]]-Override</B></td>
                         <td valign="right"><B>[[ value["override"] ]] %</B></td>
-                        <td><input type="range" min="0.0" max="100.0" value="value['override']" v-model="value['override']" step="1.0" class="slider" v-model="sliderVal" @change="spindleChange"></td>
+                        <td><input type="range" min="0.0" max="100.0" v-model="value['override']" step="1.0" class="slider" @change="spindleChange"></td>
                     </tr>
-                </body>
+                </tbody>
             </table>
 
         </td>
@@ -347,7 +347,7 @@ html,body,h1,h2,h3,h4,h5 {
         <td valign="top" width="70%">
             <b>Programm (#[[line_num]]):</b><br/>
             <div id="gcode">
-                <code id="gcode_code"><pre>{{gcode|safe}}</pre></code>
+                <code id="gcode_code"><pre v-pre>{{gcode|safe}}</pre></code>
             </div>
         </td>
         <td valign="top">
@@ -423,7 +423,7 @@ document.getElementById("rdefaultOpen").click();
 </script>
 
 
-<script src="https://cdn.jsdelivr.net/npm/vue@2.6.11"></script>
+<script src="{{ url_for('client_bp.static', filename='js/vue.min.js') }}"></script>
 <script src="{{ url_for('client_bp.static', filename='index.js') }}"></script>
 
 </body>
