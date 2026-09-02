@@ -1,0 +1,368 @@
+/* MPG pendant — GPL-2.0 (same as linuxcnc-web)
+   Palette: pure black shop display, amber = live/selected (DRO tradition),
+   red reserved for abort/estop, green only as tiny homed/connection dots.
+
+   Scaling: the whole UI is sized in rem, and the root font-size is derived
+   from the viewport — min(width-based, height-based) — so the pendant
+   scales itself to fill any phone without scrolling. Reference design is
+   380 x 810 CSS px at 1rem = 10px. */
+
+:root {
+  --bg: #000000;
+  --panel: #0c0d0f;
+  --line: #24262a;
+  --ink: #b8bcc2;
+  --dim: #5c6066;
+  --amber: #ffb000;
+  --amber-dim: #6b4a00;
+  --red: #e2321e;
+  --green: #38c25a;
+  --digits: ui-monospace, "Cascadia Mono", "Roboto Mono", "DejaVu Sans Mono", monospace;
+  --label: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html {
+  font-size: 10px;
+  font-size: clamp(8px, min(2.632vw, 1.235vh), 13px);
+}
+@supports (height: 100dvh) {
+  html { font-size: clamp(8px, min(2.632vw, 1.235dvh), 13px); }
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--label);
+  overscroll-behavior: none;
+}
+
+body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+
+#app {
+  width: 100%;
+  max-width: 42rem;
+  margin: 0 auto;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 1rem env(safe-area-inset-bottom);
+}
+
+/* ---- state strip ------------------------------------------------------ */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.badge {
+  font-size: 1.3rem;
+  font-weight: 600;
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  color: var(--dim);
+}
+.badge.ok    { color: var(--green); border-color: var(--green); }
+.badge.warn  { color: var(--amber); border-color: var(--amber); }
+.badge.estop { color: #fff; background: var(--red); border-color: var(--red); }
+.badge.sim   { color: #000; background: var(--amber); border-color: var(--amber); font-weight: 700; } /* must be unmissable */
+.spacer { flex: 1; }
+.conn {
+  width: 1rem; height: 1rem; border-radius: 50%;
+  background: var(--red);
+  flex: none;
+}
+.conn.ok { background: var(--green); }
+.abort {
+  font: 700 1.5rem var(--label);
+  color: #fff;
+  background: var(--red);
+  border: 0;
+  border-radius: 0.4rem;
+  padding: 1rem 1.6rem;
+  min-height: 4.4rem;
+}
+.abort:active { filter: brightness(1.3); }
+
+/* ---- DRO --------------------------------------------------------------- */
+.dro { padding: 0.6rem 0 0; }
+.dro-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1.2rem;
+  padding: 0.6rem 0.8rem;
+  border-left: 0.3rem solid transparent;
+}
+.dro-row.sel { border-left-color: var(--amber); background: var(--panel); }
+.dro-axis {
+  font: 700 2rem var(--label);
+  width: 2.4rem;
+  color: var(--dim);
+}
+.dro-row.sel .dro-axis { color: var(--amber); }
+.dro-val {
+  flex: 1;
+  text-align: right;
+  font-family: var(--digits);
+  font-variant-numeric: tabular-nums;
+  font-size: 3.2rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  white-space: pre;
+}
+.dro-row.sel .dro-val { color: var(--amber); font-size: 3.8rem; }
+.homed-dot {
+  width: 0.9rem; height: 0.9rem; border-radius: 50%;
+  background: var(--line);
+  align-self: center;
+  flex: none;
+}
+.homed-dot.on { background: var(--green); }
+
+.dro-foot {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 0.8rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.chip {
+  font: 600 1.3rem var(--label);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 0.8rem 1.4rem;
+  min-height: 4rem;
+}
+.lead-note { font-size: 1.2rem; color: var(--amber); min-height: 1em; }
+
+/* ---- segmented controls ------------------------------------------------ */
+.seg {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.2rem 0 0.4rem;
+}
+.seg button {
+  flex: 1;
+  font: 600 1.6rem var(--digits);
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 1.2rem 0;
+  min-height: 4.8rem;
+}
+.seg button.on {
+  color: #000;
+  background: var(--amber);
+  border-color: var(--amber);
+}
+.seg-unit { font-size: 1.2rem; color: var(--dim); padding: 0 0.4rem; flex: none; }
+.mode-seg button { font-family: var(--label); font-size: 1.5rem; }
+
+/* ---- wheel ------------------------------------------------------------- */
+.pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.wheel-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 0.8rem 0;
+  touch-action: none;
+  min-height: 0;
+}
+#wheelSvg {
+  width: min(29rem, 88vw);
+  width: min(29rem, 88vw, 42dvh);
+  height: auto;
+  display: block;
+}
+.wheel-wrap.disabled #wheelSvg { opacity: 0.35; }
+.wheel-hint {
+  position: absolute;
+  font-size: 1.3rem;
+  color: var(--dim);
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0.6rem 1.2rem;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  display: none;
+}
+.wheel-wrap.disabled .wheel-hint { display: block; }
+#ticks line { stroke: #55585e; stroke-width: 2; }
+#ticks line.major { stroke: #8a8e95; stroke-width: 3; }
+
+/* ---- jog pane ----------------------------------------------------------- */
+.jog-buttons {
+  flex: 1;
+  display: flex;
+  gap: 1.2rem;
+  padding: 1rem 0;
+  min-height: 0;
+}
+.jog-btn {
+  flex: 1;
+  font: 300 6.4rem/1 var(--digits);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  min-height: 14rem;
+  touch-action: none;
+}
+.jog-btn:active, .jog-btn.held {
+  color: #000;
+  background: var(--amber);
+  border-color: var(--amber);
+}
+.jog-btn:disabled { opacity: 0.35; }
+.jog-note { font-size: 1.2rem; color: var(--dim); text-align: center; margin: 0 0 0.8rem; }
+
+/* ---- action row --------------------------------------------------------- */
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  padding: 0.8rem 0 1.2rem;
+  border-top: 1px solid var(--line);
+}
+.act {
+  font: 600 1.2rem var(--label);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 1rem 0.2rem;
+  min-height: 4.6rem;
+}
+.act:active { border-color: var(--amber); color: var(--amber); }
+.act.off { color: var(--dim); }
+
+/* ---- half-diameter dialog ------------------------------------------------ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  padding: 1.6rem;
+}
+.dialog {
+  width: min(92vw, 34rem);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  padding: 1.6rem;
+}
+.dlg-title {
+  margin: 0 0 0.6rem;
+  font: 600 1.6rem var(--label);
+  color: var(--ink);
+}
+.dlg-tool { margin: 0 0 0.8rem; font-size: 1.3rem; color: var(--dim); }
+.dlg-usetool { width: 100%; margin-bottom: 1.2rem; }
+.dlg-label { display: block; font-size: 1.2rem; color: var(--dim); margin-bottom: 0.4rem; }
+.dlg-input {
+  width: 100%;
+  font: 500 2.4rem var(--digits);
+  font-variant-numeric: tabular-nums;
+  color: var(--amber);
+  background: #000;
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 1rem 1.2rem;
+  min-height: 5.2rem;
+}
+.dlg-input:focus { outline: none; border-color: var(--amber); }
+.dlg-err { margin: 0.6rem 0 0; font-size: 1.2rem; color: var(--red); }
+.dlg-hint { margin: 1.2rem 0 0.6rem; font-size: 1.2rem; color: var(--dim); }
+.dlg-sides { display: flex; gap: 0.8rem; }
+.dlg-side {
+  flex: 1;
+  font: 600 1.5rem var(--digits);
+  color: #000;
+  background: var(--amber);
+  border: 1px solid var(--amber);
+  border-radius: 0.4rem;
+  padding: 1.4rem 0;
+  min-height: 5.2rem;
+}
+.dlg-side:active { filter: brightness(1.15); }
+.dlg-cancel { width: 100%; margin-top: 1rem; }
+
+/* ---- toast / lock ------------------------------------------------------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 9rem;
+  transform: translateX(-50%);
+  max-width: 90vw;
+  background: var(--panel);
+  color: var(--amber);
+  border: 1px solid var(--amber-dim);
+  border-radius: 0.4rem;
+  padding: 1rem 1.4rem;
+  font-size: 1.3rem;
+  z-index: 12;   /* above the lock overlay: a failed abort must stay visible */
+}
+.lock {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amber);
+  font: 600 1.6rem var(--label);
+  z-index: 10;
+}
+/* Abort stays usable above the "reconnecting" overlay: if only the event
+   stream is down, a plain POST may still reach the server. */
+.strip .abort { position: relative; z-index: 11; }
+
+/* ---- landscape: DRO and controls left, wheel/jog right ------------------- */
+@media (orientation: landscape) and (max-height: 560px) {
+  html { font-size: clamp(7px, min(1.316vw, 2.2vh), 12px); }
+  @supports (height: 100dvh) {
+    html { font-size: clamp(7px, min(1.316vw, 2.2dvh), 12px); }
+  }
+  #app {
+    max-width: 86rem;
+    display: grid;
+    grid-template-columns: 1fr 1.1fr;
+    grid-template-rows: auto auto auto auto 1fr;
+    grid-template-areas:
+      "strip strip"
+      "dro   pane"
+      "foot  pane"
+      "mode  pane"
+      "acts  pane";
+    column-gap: 1.8rem;
+    align-content: start;
+  }
+  .strip    { grid-area: strip; }
+  .dro      { grid-area: dro; }
+  .dro-foot { grid-area: foot; }
+  .mode-seg { grid-area: mode; }
+  .actions  { grid-area: acts; align-self: start; }
+  .pane     { grid-area: pane; }
+  #wheelSvg { width: min(26rem, 40vw); width: min(26rem, 44dvh, 40vw); }
+  .jog-btn  { min-height: 12rem; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  #wheelRotor { transition: none; } /* rotation must track the finger 1:1 */
+}
