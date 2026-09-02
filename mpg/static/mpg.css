@@ -203,29 +203,48 @@ body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
 #ticks line { stroke: #55585e; stroke-width: 2; }
 #ticks line.major { stroke: #8a8e95; stroke-width: 3; }
 
-/* ---- jog pane ----------------------------------------------------------- */
+/* ---- jog pane: X/Y cross with a Z pair on the right ---------------------- */
 .jog-buttons {
   flex: 1;
-  display: flex;
-  gap: 1.2rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 0.35fr 1.1fr;
+  grid-template-rows: repeat(6, 1fr);
+  grid-template-areas:
+    ".  yp .  . zp"
+    ".  yp .  . zp"
+    "xm .  xp . zp"
+    "xm .  xp . zm"
+    ".  ym .  . zm"
+    ".  ym .  . zm";
+  gap: 0.8rem;
   padding: 1rem 0;
-  min-height: 0;
+  min-height: 24rem;
 }
+#jogYp { grid-area: yp; } #jogYm { grid-area: ym; }
+#jogXm { grid-area: xm; } #jogXp { grid-area: xp; }
+#jogZp { grid-area: zp; } #jogZm { grid-area: zm; }
 .jog-btn {
-  flex: 1;
-  font: 300 6.4rem/1 var(--digits);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 0;
+  min-width: 0;
   color: var(--ink);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 0.6rem;
-  min-height: 14rem;
   touch-action: none;
 }
+.jog-btn .arrow { font: 300 4.6rem/1 var(--label); }
+.jog-btn .lbl { font: 600 1.3rem var(--label); color: var(--dim); }
 .jog-btn:active, .jog-btn.held {
   color: #000;
   background: var(--amber);
   border-color: var(--amber);
 }
+.jog-btn:active .lbl, .jog-btn.held .lbl { color: #000; }
 .jog-btn:disabled { opacity: 0.35; }
 .jog-note { font-size: 1.2rem; color: var(--dim); text-align: center; margin: 0 0 0.8rem; }
 
@@ -362,7 +381,7 @@ body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
   .actions  { grid-area: acts; align-self: start; }
   .pane     { grid-area: pane; }
   #wheelSvg { width: min(26rem, 40vw); width: min(26rem, 44dvh, 40vw); }
-  .jog-btn  { min-height: 12rem; }
+  .jog-buttons { min-height: 20rem; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

@@ -43,8 +43,9 @@ const el = {
   leadNote: $("leadNote"), modeSeg: $("modeSeg"), mpgPane: $("mpgPane"),
   jogPane: $("jogPane"), stepSeg: $("stepSeg"), speedSeg: $("speedSeg"),
   wheelWrap: $("wheelWrap"), wheelSvg: $("wheelSvg"), rotor: $("wheelRotor"),
-  ticks: $("ticks"), wheelHint: $("wheelHint"), jogPlus: $("jogPlus"),
-  jogMinus: $("jogMinus"), homeBtn: $("homeBtn"), homeAllBtn: $("homeAllBtn"),
+  ticks: $("ticks"), wheelHint: $("wheelHint"),
+  jogBtns: Array.from(document.querySelectorAll("#jogPane .jog-btn")),   // six arrows
+  homeBtn: $("homeBtn"), homeAllBtn: $("homeAllBtn"),
   zeroBtn: $("zeroBtn"), powerBtn: $("powerBtn"), vibeBtn: $("vibeBtn"),
   zeroHalfBtn: $("zeroHalfBtn"), halfDlg: $("halfDlg"), halfTitle: $("halfTitle"),
   halfTool: $("halfTool"), halfUseTool: $("halfUseTool"), halfDia: $("halfDia"),
@@ -199,7 +200,11 @@ function render() {
     : !st.on ? "machine off"
     : !st.idle ? "program running" : "";
   if (!jogOk && jogHeld) stopJog();   // release first: a disabled button may swallow pointerup
-  el.jogPlus.disabled = el.jogMinus.disabled = !jogOk;
+  el.jogBtns.forEach((b) => {
+    b.disabled = !jogOk;
+    // an arrow for an axis this machine does not have (lathe XZ) is hidden
+    b.hidden = !!(st.axes && !(b.dataset.axis in st.axes));
+  });
   const u = st.units || "mm";
   document.querySelectorAll("[data-unit]").forEach((n) => {
     n.textContent = n.dataset.unit === "per-min" ? u + "/min" : u;
@@ -367,9 +372,8 @@ let jogSeq = 0;          // every start gets a new number; the server refuses a
 // client token, so a reload or a second phone starts with a clean slate
 const CLIENT = Math.random().toString(36).slice(2) + Date.now().toString(36);
 
-function startJog(btn, dir) {
+function startJog(btn, axis, dir) {
   if (!st.jog_ok || jogHeld) return;
-  const axis = settings.axis;
   const seq = ++jogSeq;
   jogHeld = btn;
   jogAxis = axis;
@@ -412,10 +416,14 @@ function stopJog() {
     .then((r) => { if (!r.ok) toast(r.msg || "jog stop failed"); });
 }
 
-[[el.jogPlus, 1], [el.jogMinus, -1]].forEach(([btn, dir]) => {
+// each arrow carries its own axis and direction; the DRO selection only
+// matters for the wheel and the zero/home buttons
+el.jogBtns.forEach((btn) => {
+  const axis = btn.dataset.axis;
+  const dir = parseInt(btn.dataset.dir, 10) >= 0 ? 1 : -1;
   btn.addEventListener("pointerdown", (ev) => {
     btn.setPointerCapture(ev.pointerId);
-    startJog(btn, dir);
+    startJog(btn, axis, dir);
   });
   ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) =>
     btn.addEventListener(t, stopJog));

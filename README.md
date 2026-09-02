@@ -12,6 +12,9 @@ over shop Wi-Fi. The original web frontend still lives at `/` (with a few fixes,
   <img src="images/03-zero-half-dialog.png" width="230" alt="Half-diameter edge zero">
 </p>
 
+*The jog-mode screenshot shows the earlier two-button layout; jog mode now has six
+arrows (X/Y cross, Z pair).*
+
 ## Features
 
 - **MPG wheel** — 24 detents per revolution, one vibration tick per detent
@@ -21,7 +24,8 @@ over shop Wi-Fi. The original web frontend still lives at `/` (with a few fixes,
   (max 2 mm) ahead of the axis. Spin faster than the machine can follow and extra
   clicks are dropped, with a note on screen. A network stall can never store up
   surprise motion.
-- **Jog mode** — big hold-to-move buttons at 100 / 600 / 3000 mm/min, with a
+- **Jog mode** — six hold-to-move arrows (an X/Y cross and a Z up/down pair) at
+  100 / 600 / 3000 mm/min, with a
   **server-side deadman**: the page sends a keepalive every 150 ms and the server
   stops the jog itself after 0.4 s of silence (Wi-Fi drop, app killed, phone died).
 - **DRO** — work / machine coordinates, per-axis homed indicators, tap a row to
@@ -117,7 +121,8 @@ the vibration, and the whole workflow safely.
 
 Tap a DRO row to select the axis; the `work` chip toggles work/machine coordinates.
 In **Wheel** mode pick a step size and turn — each detent is one increment. In
-**Jog** mode pick a speed and hold − / + ; release stops. **Zero X** sets the work
+**Jog** mode pick a speed and hold an arrow: the cross moves X and Y, the pair on the
+right moves Z up and down; release stops. **Zero X** sets the work
 offset of the selected axis to zero at the current position.
 
 **Zero X ½Ø** is edge finding: jog until the tool touches the part edge, tap it, and
@@ -163,7 +168,7 @@ to what you expect, you picked the wrong side button.
 
 | Where | What |
 |---|---|
-| `mpg/mpg.py` (top) | `AXES` (add `"a"` for a 4th axis — the UI follows), `CONT_TIMEOUT` deadman timeout, `MAX_LEAD_FACTOR` / `MAX_LEAD_MM` wheel lead cap, `UNHOMED_MAX_MM_MIN` speed cap before homing, poll/SSE rates. Environment: `MPG_SIM=1` simulator, `MPG_ERRORS=1` error toasts |
+| `mpg/mpg.py` (top) | `AXES` (add `"a"` for a 4th axis — the DRO and wheel follow; the jog arrows cover X/Y/Z), `CONT_TIMEOUT` deadman timeout, `MAX_LEAD_FACTOR` / `MAX_LEAD_MM` wheel lead cap, `UNHOMED_MAX_MM_MIN` speed cap before homing, poll/SSE rates. Environment: `MPG_SIM=1` simulator, `MPG_ERRORS=1` error toasts |
 | `mpg/static/mpg.js` (top) | `DETENT_DEG` detents per revolution (also drives the tick marks on the wheel), `WHEEL_FEED` wheel feed rate, `KEEPALIVE_MS` keepalive interval — keep it well under `CONT_TIMEOUT` |
 | `mpg/templates/mpg.html` | the step-size and jog-speed button values |
 

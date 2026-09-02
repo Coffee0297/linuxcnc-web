@@ -78,10 +78,15 @@
       <span class="seg-unit" data-unit="per-min">mm/min</span>
     </div>
     <div class="jog-buttons">
-      <button id="jogMinus" class="jog-btn" type="button">&minus;</button>
-      <button id="jogPlus"  class="jog-btn" type="button">+</button>
+      <!-- X/Y cross, Z pair on the right; each arrow carries its own axis and direction -->
+      <button id="jogYp" class="jog-btn" data-axis="y" data-dir="1"  type="button"><span class="arrow">&#9650;</span><span class="lbl">Y+</span></button>
+      <button id="jogXm" class="jog-btn" data-axis="x" data-dir="-1" type="button"><span class="arrow">&#9664;</span><span class="lbl">X&minus;</span></button>
+      <button id="jogXp" class="jog-btn" data-axis="x" data-dir="1"  type="button"><span class="arrow">&#9654;</span><span class="lbl">X+</span></button>
+      <button id="jogYm" class="jog-btn" data-axis="y" data-dir="-1" type="button"><span class="arrow">&#9660;</span><span class="lbl">Y&minus;</span></button>
+      <button id="jogZp" class="jog-btn" data-axis="z" data-dir="1"  type="button"><span class="arrow">&#9650;</span><span class="lbl">Z+</span></button>
+      <button id="jogZm" class="jog-btn" data-axis="z" data-dir="-1" type="button"><span class="arrow">&#9660;</span><span class="lbl">Z&minus;</span></button>
     </div>
-    <p class="jog-note">Hold to move the selected axis. Release stops.</p>
+    <p class="jog-note">Hold an arrow to move that axis. Release stops.</p>
   </section>
 
   <footer class="actions">

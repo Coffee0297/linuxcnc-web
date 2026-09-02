@@ -55,7 +55,8 @@ and this page moves a machine. Do not port-forward it.
   the coordinate readout.
 - Wheel mode: pick the resolution (0.001 / 0.01 / 0.1 / 1.0 mm per detent)
   and turn. 24 detents per revolution, one vibration tick per detent.
-- Jog mode: pick a speed (mm/min) and hold − / +. Release stops.
+- Jog mode: pick a speed (mm/min) and hold an arrow — the cross moves X/Y, the
+  pair on the right moves Z up/down. Release stops.
 - Home X / Home all / Zero X (sets the current work offset to 0 via
   G10 L20) / Machine on-off / Abort.
 - Zero X ½Ø — edge finding: touch the tool against the part edge and tap it.
@@ -95,8 +96,8 @@ and this page moves a machine. Do not port-forward it.
 
 ## 6. Tuning
 
-Top of `mpg/mpg.py`: `AXES` (add `"a"` for a 4th axis — the UI follows
-automatically), deadman timeout, wheel lead cap, `UNHOMED_MAX_MM_MIN` speed cap
+Top of `mpg/mpg.py`: `AXES` (add `"a"` for a 4th axis — the DRO and wheel
+follow; the jog arrows cover X/Y/Z), deadman timeout, wheel lead cap, `UNHOMED_MAX_MM_MIN` speed cap
 before homing, poll rates. Environment: `MPG_SIM=1` simulator, `MPG_ERRORS=1`
 error toasts.
 Top of `mpg/static/mpg.js`: detent angle, wheel feed rate.
