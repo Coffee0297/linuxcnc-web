@@ -1,10 +1,9 @@
-# linuxcnc-web — phone MPG pendant
+# linuxcnc-web — phone MPG pendant for LinuxCNC
 
-A fork of [multigcs/linuxcnc-web](https://github.com/multigcs/linuxcnc-web) that adds a
-touch jog pendant for your phone: a detented virtual handwheel with haptic clicks, a
+A touch jog pendant for your phone: a detented virtual handwheel with haptic clicks, a
 hold-to-jog mode, and DRO touch-off tools — served straight from the LinuxCNC machine
-over shop Wi-Fi. The original web frontend still lives at `/` (with a few fixes, see
-*Changes to the upstream UI*); the pendant is a self-contained blueprint at `/mpg/`.
+over shop Wi-Fi. One small Flask app, no build step, no cloud: open the machine's
+address on the phone and you are on the pendant.
 
 <p align="center">
   <img src="images/01-wheel-mode.png" width="230" alt="Wheel mode">
@@ -32,8 +31,9 @@ over shop Wi-Fi. The original web frontend still lives at `/` (with a few fixes,
 - **Interlocks** — jogging is refused server-side while a program is running, in
   e-stop, or with the machine off. Joint jog before homing, world-axis jog after.
 - **Machine controls** — home axis / home all, machine on/off, abort.
-- **Fits any phone** — the whole UI scales from the viewport (no scrolling), with a
-  two-column landscape layout. Settings persist on the phone.
+- **Fits any phone** — the whole UI scales from the viewport so that it fills the
+  screen without scrolling (down to an 8 px base font: very small 360×640 phones
+  scroll a little), with a two-column landscape layout. Settings persist on the phone.
 - **Built-in simulator** — on a Windows or macOS PC (or anywhere with `MPG_SIM=1`)
   the backend runs a simulator, so the full UI can be tried before it ever touches
   the machine. On Linux a missing `linuxcnc` module is a start-up error, never a
@@ -46,8 +46,8 @@ over shop Wi-Fi. The original web frontend still lives at `/` (with a few fixes,
 
 ## Requirements
 
-- LinuxCNC 2.9 or newer — the pendant and the upstream code are Python 3, and the
-  `linuxcnc` Python module of LinuxCNC 2.8 is Python-2-only
+- LinuxCNC 2.9 or newer — the pendant is Python 3, and the `linuxcnc` Python module
+  of LinuxCNC 2.8 is Python-2-only
 - Python 3 and Flask on the machine PC — on the Debian-based LinuxCNC images:
   `sudo apt install python3-flask`
 - A phone with a modern browser on the same network
@@ -57,20 +57,17 @@ over shop Wi-Fi. The original web frontend still lives at `/` (with a few fixes,
 ```sh
 git clone https://github.com/Coffee0297/linuxcnc-web.git
 cd linuxcnc-web
-# LinuxCNC must already be running (see below)
 flask run --host=0.0.0.0
 ```
 
 `--host=0.0.0.0` matters — without it Flask only listens on localhost and the phone
-can't connect. Then open **`http://<cnc-ip>:5000/mpg/`** on the phone (the original
-frontend is at `http://<cnc-ip>:5000/`). Add it to the home screen for quick access,
-and raise the phone's screen timeout — the Wake Lock API needs HTTPS, which a plain
-LAN server doesn't have.
+can't connect. Then open **`http://<cnc-ip>:5000/`** on the phone; it lands on the
+pendant (`/mpg/`). Add it to the home screen for quick access, and raise the phone's
+screen timeout — the Wake Lock API needs HTTPS, which a plain LAN server doesn't have.
 
-Start LinuxCNC first. The full app (`app.py`) also loads the upstream `api`/`client`
-blueprints, which connect to LinuxCNC at import time and fail if it is not running.
-Only `standalone_mpg.py` (below) can be started beforehand: the pendant then shows
-*waiting for LinuxCNC* and connects by itself once it's up.
+LinuxCNC can be started before or after the pendant. Until it is up the badge shows
+*waiting for LinuxCNC*, and the pendant connects by itself once it is running. Start
+the server as the same user that runs LinuxCNC (NML needs the same environment).
 
 All speeds and step sizes are machine units — the pendant assumes a metric (mm)
 config; on an inch machine the same numbers are inches.
@@ -80,8 +77,7 @@ written for trivkins XYZ machines with one motor per axis. On other kinematics
 (gantry, lathe) it detects the mismatch and refuses joint-mode jogs and per-axis
 homing — see the Safety model.
 
-To start the server at boot, a minimal systemd unit (it simply retries every 5 s
-until LinuxCNC is up)
+To start the server at boot, a minimal systemd unit
 (`/etc/systemd/system/linuxcnc-web.service`):
 
 ```ini
@@ -106,13 +102,13 @@ then `sudo systemctl enable --now linuxcnc-web`.
 
 ```sh
 pip install flask
-python standalone_mpg.py             # Windows / macOS: simulator starts automatically
-MPG_SIM=1 python standalone_mpg.py   # Linux: simulate only when asked
+python app.py             # Windows / macOS: simulator starts automatically
+MPG_SIM=1 python app.py   # Linux: simulate only when asked
 ```
 
-runs only the pendant with the built-in simulator (fake XYZ axes and a Ø6 mm tool 3
-in the "tool table"). Open `http://<pc-ip>:5000/mpg/` on the phone to feel the wheel,
-the vibration, and the whole workflow safely.
+runs the pendant with the built-in simulator (fake XYZ axes and a Ø6 mm tool 3 in the
+"tool table"). Open `http://<pc-ip>:5000/` on the phone to feel the wheel, the
+vibration, and the whole workflow safely.
 
 ## Using it
 
@@ -140,7 +136,8 @@ to what you expect, you picked the wrong side button.
 - The page treats 1.5 s of silence on the status stream as a lost link: it releases
   a held jog client-side and greys out. The server-side 0.4 s deadman is unchanged.
 - The stop of every held jog is checked. If LinuxCNC does not acknowledge it within
-  0.5 s the server also sends a task abort and the phone shows *jog stop failed -
+  0.5 s the stop is sent once more; if that is not acknowledged either (up to about
+  1 s in total) the server sends a task abort and the phone shows *jog stop failed -
   abort sent*.
 - Start and stop requests carry a sequence number, so a stop that overtakes its own
   start on the network can never leave a jog running unwatched.
@@ -166,7 +163,7 @@ to what you expect, you picked the wrong side button.
 | Where | What |
 |---|---|
 | `mpg/mpg.py` (top) | `AXES` (add `"a"` for a 4th axis — the DRO and wheel follow; the jog arrows cover X/Y/Z), `CONT_TIMEOUT` deadman timeout, `MAX_LEAD_FACTOR` / `MAX_LEAD_MM` wheel lead cap, `UNHOMED_MAX_MM_MIN` speed cap before homing, poll/SSE rates. Environment: `MPG_SIM=1` simulator, `MPG_ERRORS=1` error toasts |
-| `mpg/static/mpg.js` (top) | `DETENT_DEG` detents per revolution (also drives the tick marks on the wheel), `WHEEL_FEED` wheel feed rate, `KEEPALIVE_MS` keepalive interval — keep it well under `CONT_TIMEOUT` |
+| `mpg/static/mpg.js` (top) | `DETENT_DEG` wheel degrees per detent (15 → 24 detents per revolution; also drives the tick marks on the wheel), `WHEEL_FEED` wheel feed rate, `KEEPALIVE_MS` keepalive interval — keep it well under `CONT_TIMEOUT` |
 | `mpg/templates/mpg.html` | the step-size and jog-speed button values |
 
 ## Troubleshooting
@@ -195,37 +192,13 @@ NML at 20 Hz and streams it to the page over Server-Sent Events at 10 Hz; comman
 go back as small JSON POSTs. Wheel detents become bounded incremental jogs, held
 buttons become continuous jogs guarded by a watchdog thread, and touch-off runs
 `G10 L20` through a brief MDI round-trip. No websockets, no build step, no
-dependencies beyond Flask. The screenshots in `images/` are taken from the pendant
-running in simulator mode.
-
-## Changes to the upstream UI
-
-The original page at `/` is mostly as upstream left it, with these fixes:
-
-- Vue is served locally, so the page works offline (no CDN needed on the shop LAN).
-- The upload only accepts `.ngc`/`.nc` files with safe filenames, and the
-  loaded-file URL parameter is limited to the upload folder.
-- The rs274 preview call is no longer built with a shell, and the G-code listing is
-  HTML-escaped.
-- The leftover debug routes `/mdi`, `/start`, `/spindle`, `/homeing` and `/view` were
-  removed.
-- The spindle ↶ / STOP / ↷ buttons now work: STOP is spindle off; ↶ / ↷ start at
-  the last programmed S, else at 1 rpm like AXIS.
-- The MDI history keeps the 10 most recent commands; MDI text is URL-encoded and
-  refusals are shown next to the Go button.
-- A red banner appears when the page loses the server, instead of the DRO silently
-  freezing on old values.
-- Still as upstream: the jog buttons on this page have no server-side dead-man and
-  always request joint-jog mode. Use the pendant for jogging.
-- Still as upstream: while this page is open it reads the LinuxCNC error channel for
-  its error list, which takes those messages away from AXIS or gmoccapy. Close it
-  when AXIS is the operator GUI.
-- Jog buttons stop when the pointer leaves them.
-
-These upstream-side changes could not be run against a real machine — try them once
-with the e-stop within reach.
+dependencies beyond Flask. `app.py` registers the blueprint at `/mpg/` and redirects
+`/` there; the blueprint is self-contained and can be registered in any other Flask
+app the same way. The screenshots in `images/` are taken from the pendant running in
+simulator mode.
 
 ## Credits & license
 
-Built on [linuxcnc-web](https://github.com/multigcs/linuxcnc-web) by Oliver Dippel
-(multigcs). GPL-2.0, same as upstream — see `LICENSE`.
+Forked from [linuxcnc-web](https://github.com/multigcs/linuxcnc-web) by Oliver Dippel
+(multigcs), whose Flask skeleton this project started from. GPL-2.0, same as
+upstream — see `LICENSE`.

@@ -1,14 +1,21 @@
-import os
+"""Phone MPG pendant for LinuxCNC.
 
-from api.api import api_bp
-from client.client import client_bp
-from flask import Flask
+    flask run --host=0.0.0.0     # on the machine PC; LinuxCNC may be started before or after
+    python app.py                # the same; on Windows/macOS the built-in simulator starts by itself
+
+Open http://<pc-ip>:5000/ on the phone: it lands on the pendant at /mpg/.
+"""
+from flask import Flask, redirect
 from mpg.mpg import mpg_bp
 
-UPLOAD_FOLDER = f"{os.path.expanduser('~')}/nc_files/"
-
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.register_blueprint(api_bp, url_prefix="/api_v1")
-app.register_blueprint(client_bp)
 app.register_blueprint(mpg_bp, url_prefix="/mpg")
+
+
+@app.route("/")
+def root():
+    return redirect("/mpg/")
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, threaded=True)

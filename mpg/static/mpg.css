@@ -5,7 +5,11 @@
    Scaling: the whole UI is sized in rem, and the root font-size is derived
    from the viewport — min(width-based, height-based) — so the pendant
    scales itself to fill any phone without scrolling. Reference design is
-   380 x 810 CSS px at 1rem = 10px. */
+   380 x 840 CSS px at 1rem = 10px: the portrait column (strip, DRO, mode
+   switch, wheel pane, two-row action bar) is 83.6rem tall, so the height
+   coefficient is 1/84; the landscape left column is 46.5rem, hence 1/47.6.
+   Safe-area insets are taken off the height first (notched phones in
+   home-screen mode). */
 
 :root {
   --bg: #000000;
@@ -23,10 +27,13 @@
 
 html {
   font-size: 10px;
-  font-size: clamp(8px, min(2.632vw, 1.235vh), 13px);
+  font-size: clamp(8px, min(2.632vw, 1.19vh), 13px);
 }
 @supports (height: 100dvh) {
-  html { font-size: clamp(8px, min(2.632vw, 1.235dvh), 13px); }
+  html {
+    font-size: clamp(8px, min(2.632vw,
+      calc((100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 84)), 13px);
+  }
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -358,9 +365,12 @@ body { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
 
 /* ---- landscape: DRO and controls left, wheel/jog right ------------------- */
 @media (orientation: landscape) and (max-height: 560px) {
-  html { font-size: clamp(7px, min(1.316vw, 2.2vh), 12px); }
+  html { font-size: clamp(7px, min(1.316vw, 2.1vh), 12px); }
   @supports (height: 100dvh) {
-    html { font-size: clamp(7px, min(1.316vw, 2.2dvh), 12px); }
+    html {
+      font-size: clamp(7px, min(1.316vw,
+        calc((100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)) / 47.6)), 12px);
+    }
   }
   #app {
     max-width: 86rem;

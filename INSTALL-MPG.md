@@ -1,21 +1,20 @@
 > Full documentation is in README.md — this file is the short install card.
 
-# MPG pendant for linuxcnc-web — install & use
+# MPG pendant for LinuxCNC — install & use
 
 Needs LinuxCNC 2.9 or newer (Python 3 bindings) and Python 3 + Flask.
 
 ## 1. Install
 
 After `git clone https://github.com/Coffee0297/linuxcnc-web.git` everything is
-in place: `mpg/` is the whole pendant (backend blueprint + page + JS/CSS,
-self-contained, touches nothing in `api/` or `client/`), `app.py` registers
-it, and `standalone_mpg.py` runs only the pendant for testing anywhere.
+in place: `mpg/` is the whole pendant (backend blueprint + page + JS/CSS) and
+`app.py` serves it — the pendant lives at `/mpg/` and `/` redirects there.
 
-To add the pendant to an existing linuxcnc-web checkout instead, copy the
-`mpg/` folder next to `app.py` and add these two lines to it:
+The blueprint is self-contained. To serve it from another Flask app, copy the
+`mpg/` folder next to that app and add these two lines:
 
     from mpg.mpg import mpg_bp            # with the other imports
-    app.register_blueprint(mpg_bp, url_prefix="/mpg")   # after the other blueprints
+    app.register_blueprint(mpg_bp, url_prefix="/mpg")
 
 ## 2. Try it on Windows first (simulator)
 
@@ -25,9 +24,9 @@ module there is treated as an error), so the whole UI — wheel, detent vibratio
 can be tested from your phone before anything touches the machine.
 
     pip install flask
-    python standalone_mpg.py
+    python app.py
 
-Phone on the same network → `http://<pc-ip>:5000/mpg/`
+Phone on the same network → `http://<pc-ip>:5000/`
 (allow Python through the Windows firewall for private networks if asked).
 
 Vibration works in Chrome/Firefox on Android. iPhone: Safari has no
@@ -35,16 +34,15 @@ vibration API, so detents are visual only there.
 
 ## 3. On the CNC machine
 
-Clone the repo on the Debian box (or copy your checkout there). With LinuxCNC running, from the repo dir:
+Clone the repo on the Debian box (or copy your checkout there). From the repo dir:
 
     flask run --host=0.0.0.0
 
 `--host=0.0.0.0` is required, otherwise Flask only listens on localhost and
-the phone can't reach it. Then open `http://<cnc-ip>:5000/mpg/` on the phone.
-LinuxCNC (2.9 or newer) must be running before `app.py` starts — the upstream
-blueprints connect to it at import time. Only `standalone_mpg.py` can be
-started earlier: its badge shows "waiting for LinuxCNC" and it reconnects by
-itself.
+the phone can't reach it. Then open `http://<cnc-ip>:5000/` on the phone.
+LinuxCNC (2.9 or newer) may be started before or after the pendant: until it
+is up the badge shows "waiting for LinuxCNC", and the pendant connects by
+itself. Start the server as the same user that runs LinuxCNC.
 
 Keep this on the shop LAN only — the Flask dev server has no authentication
 and this page moves a machine. Do not port-forward it.
@@ -77,12 +75,11 @@ and this page moves a machine. Do not port-forward it.
 - The page itself treats 1.5 s of silence on the status stream as a lost
   link: it releases a held jog client-side and greys out.
 - The stop of every held jog is checked; if LinuxCNC does not acknowledge it
-  within 0.5 s the server also sends a task abort and the phone says so.
+  within 0.5 s it is sent once more, and if that is not acknowledged either (up
+  to about 1 s) the server also sends a task abort and the phone says so.
   Speed is capped at 600 mm/min until every joint is homed. Machine on,
   Home X and Home all need a 0.6 s hold. Zero refuses while an axis is
   still moving.
-- The original page at / still reads the error channel while it is open and
-  takes those messages away from AXIS; close it when AXIS is the operator GUI.
 - Error toasts are off by default (the LinuxCNC error channel is a queue and
   the phone would steal messages from AXIS); start with `MPG_ERRORS=1` if the
   phone is your only GUI.
