@@ -419,6 +419,15 @@ class Pendant:
             self.wheel_seen = time.monotonic()
             max_lead = min(MAX_LEAD_MM * self._units_per_mm(), MAX_LEAD_FACTOR * increment)
             lead = self.wheel_target[axis] - actual
+            if abs(lead) > max_lead + 1e-6:
+                # The remembered target no longer describes this axis: something
+                # else moved it (homing, a continuous jog, AXIS, a second phone)
+                # since the last detent. Clamping against such a lead would turn
+                # one click into a jump of the whole difference, possibly
+                # against the direction of the turn. Start over from where the
+                # axis really is.
+                self.wheel_target[axis] = actual
+                lead = 0.0
             new_lead = clamp(lead + detents * increment, -max_lead, max_lead)
             # Whole increments that still fit under the lead cap. Truncate
             # toward zero so clamping can never over-apply, but with a small
@@ -426,6 +435,12 @@ class Pendant:
             # int() silently dropped legitimate detents (0.999... -> 0).
             q = (new_lead - lead) / increment
             applied = int(math.copysign(math.floor(abs(q) + 1e-6), q))
+            # Hard invariant, independent of the arithmetic above: a click never
+            # moves the axis against the turn, and never further than it turned.
+            if applied * detents <= 0:
+                applied = 0
+            elif abs(applied) > abs(detents):
+                applied = detents
             if applied == 0:
                 return {"ok": True, "applied": 0, "clamped": True}
             dist = applied * increment
@@ -497,6 +512,7 @@ class Pendant:
                 self.cont_seq = seq
                 self.cont_client = client
                 self.cont_deadline = time.monotonic() + CONT_TIMEOUT
+                self.wheel_target = {}   # a held jog moves the axis away from any wheel target
                 return {"ok": True, "limited": limited}
             except Exception as exc:
                 return {"ok": False, "msg": str(exc)}
@@ -591,6 +607,9 @@ class Pendant:
             if not self._stop_cont() and name != "abort":
                 return {"ok": False, "msg": "jog stop failed - abort sent"}
             self._refresh_locked()
+            # home / on / off / zero / abort all end the current wheel gesture:
+            # a remembered lead would refer to positions that no longer apply
+            self.wheel_target = {}
             if not self.sim and (not self.connected or self.cmd is None):
                 return {"ok": False, "msg": "not connected to LinuxCNC"}
             try:
